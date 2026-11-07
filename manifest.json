@@ -1,0 +1,19 @@
+{
+  "name": "sola",
+  "short_name": "sola",
+  "description": "Ableton Live スタイルのコード進行スケッチ＆ピアノ再生アプリ sola",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#181818",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

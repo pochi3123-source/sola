@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="64" fill="#181818"/>
+  <rect x="24" y="24" width="464" height="464" rx="44" fill="#222222" stroke="#111111" stroke-width="8"/>
+  <!-- Ableton style bars -->
+  <rect x="76" y="88" width="64" height="336" rx="6" fill="#FF9D00"/>
+  <rect x="168" y="88" width="64" height="336" rx="6" fill="#FF9D00"/>
+  <rect x="260" y="88" width="64" height="336" rx="6" fill="#00D2FF"/>
+  <rect x="352" y="88" width="84" height="84" rx="6" fill="#00FF66"/>
+  <polygon points="376,220 376,416 444,318" fill="#E6E6E6"/>
+</svg>

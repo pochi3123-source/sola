@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "sola",
+    "slug": "sola",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#121212",
+    "android": {
+      "package": "com.hisahisa.sola",
+      "adaptiveIcon": {
+        "backgroundColor": "#1E1E1E"
+      }
+    }
+  }
+}

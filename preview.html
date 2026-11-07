@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sola — スマホアプリ導入＆プレビュー</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+    body {
+      background: #141414;
+      color: #e6e6e6;
+      min-height: 100vh;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+    .wrap {
+      max-width: 960px;
+      width: 100%;
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 820px) {
+      .wrap { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: #222222;
+      border: 1px solid #111;
+      border-top: 3px solid #ff9d00;
+      padding: 18px;
+      border-radius: 3px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    h1 { font-size: 22px; font-weight: 800; color: #ff9d00; letter-spacing: 0.06em; }
+    .sub { font-size: 13px; color: #b0b0b0; line-height: 1.5; }
+    .qr-box {
+      background: #ffffff;
+      padding: 12px;
+      border-radius: 4px;
+      align-self: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .qr-box img { width: 180px; height: 180px; display: block; }
+    .steps {
+      font-size: 12px;
+      color: #d8d8d8;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: #191919;
+      padding: 12px;
+      border: 1px solid #111;
+    }
+    .url-link {
+      display: inline-block;
+      background: #ff9d00;
+      color: #111;
+      font-weight: 800;
+      font-size: 12px;
+      text-decoration: none;
+      padding: 8px 12px;
+      text-align: center;
+      border-radius: 2px;
+    }
+    .phone-frame {
+      width: 100%;
+      max-width: 440px;
+      height: 760px;
+      border: 8px solid #2c2c2c;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+      justify-self: center;
+    }
+    iframe { width: 100%; height: 100%; border: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>sola</h1>
+      <p class="sub">Androidケータイで下のQRコードを読み取ると、そのままスマホ専用アプリ『sola』としてホーム画面に追加できます（オフラインでも動作）。</p>
+      <div class="qr-box">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https%3A%2F%2Fpochi3123-source.github.io%2Fsola%2F" alt="QR Code" />
+        <span style="color:#111; font-size:11px; font-weight:700;">Androidカメラでスキャン</span>
+      </div>
+      <a class="url-link" href="https://pochi3123-source.github.io/sola/" target="_blank">
+        https://pochi3123-source.github.io/sola/ ↗
+      </a>
+      <div class="steps">
+        <div><strong>【Androidで『sola』をアプリ化する手順（10秒）】</strong></div>
+        <div>1. Androidのカメラで上のQRコードを読み取ってChromeで開く</div>
+        <div>2. 画面下のバナー、または右上の「︙」メニューから<strong>「アプリをインストール」</strong>（または「ホーム画面に追加」）をタップ</div>
+        <div>3. ホーム画面に Ableton 風アイコンの<strong>『sola』</strong>が追加され、全画面アプリとしていつでも起動できます！</div>
+      </div>
+    </div>
+
+    <div class="phone-frame">
+      <iframe src="./index.html"></iframe>
+    </div>
+  </div>
+</body>
+</html>
