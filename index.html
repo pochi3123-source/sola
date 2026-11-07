@@ -317,15 +317,32 @@
     }
 
     .clip-slot.dragging {
-      opacity: 0.45;
-      transform: scale(0.97);
-      outline: 2px dashed var(--ableton-amber);
+      opacity: 0.22;
+      background: #141414 !important;
+      outline: 2px dashed var(--ableton-amber) !important;
+      outline-offset: -2px;
+      transform: scale(0.96);
     }
 
     .clip-slot.drag-over {
-      background: #483b22;
-      outline: 2px solid var(--ableton-cyan);
+      background: #2f3b44 !important;
+      outline: 2px solid var(--ableton-cyan) !important;
       outline-offset: -2px;
+      transform: scale(1.02);
+    }
+
+    .floating-drag-ghost {
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 9999;
+      pointer-events: none;
+      background: #3d3d3d;
+      outline: 2px solid var(--ableton-amber);
+      box-shadow: 0 18px 36px rgba(0, 0, 0, 0.78), 0 0 14px rgba(255, 157, 0, 0.35);
+      opacity: 0.96;
+      will-change: transform;
+      transition: none !important;
     }
 
     .clip-actions-right {
@@ -1246,12 +1263,36 @@
     }
 
     // =========================================================================
-    // 6. UI RENDERING
+    // 6. UI RENDERING & FLOATING DRAG ENGINE
     // =========================================================================
-    let dragSourceIdx = null;
-    let touchStartPos = null;
-    let touchHoldTimer = null;
-    let touchDropIdx = null;
+    let dragState = null;
+
+    function createFloatingGhost(slotEl, clientX, clientY) {
+      removeFloatingGhost();
+      const rect = slotEl.getBoundingClientRect();
+      const ghost = slotEl.cloneNode(true);
+      ghost.classList.remove("dragging", "drag-over");
+      ghost.classList.add("floating-drag-ghost");
+      ghost.style.width = `${rect.width}px`;
+      ghost.style.height = `${rect.height}px`;
+      document.body.appendChild(ghost);
+
+      const offsetX = clientX - rect.left;
+      const offsetY = clientY - rect.top;
+      updateFloatingGhostPosition(ghost, clientX, clientY, offsetX, offsetY);
+      return { ghost, offsetX, offsetY };
+    }
+
+    function updateFloatingGhostPosition(ghost, clientX, clientY, offsetX, offsetY) {
+      if (!ghost) return;
+      const x = clientX - offsetX;
+      const y = clientY - offsetY - 8; // 8px lift above finger
+      ghost.style.transform = `translate3d(${x}px, ${y}px, 0) scale(1.06) rotate(-1.5deg)`;
+    }
+
+    function removeFloatingGhost() {
+      document.querySelectorAll(".floating-drag-ghost").forEach(el => el.remove());
+    }
 
     function reorderChord(fromIdx, toIdx) {
       if (fromIdx < 0 || toIdx < 0 || fromIdx >= state.chords.length || toIdx >= state.chords.length) return;
@@ -1304,7 +1345,6 @@
         const slot = document.createElement("div");
         slot.className = "clip-slot" + (isSelected ? " selected" : "") + (isPlayingThis ? " playing" : "");
         slot.style.setProperty("--clip-color", color);
-        slot.setAttribute("draggable", "true");
         slot.dataset.clipIndex = String(idx);
 
         // Beat LEDs
@@ -1372,91 +1412,144 @@
           renderUI();
         });
 
-        // Desktop HTML5 Drag & Drop
-        slot.addEventListener("dragstart", (e) => {
-          dragSourceIdx = idx;
+        // Unified Pointer / Touch / Mouse Floating Drag (feels like holding the physical clip)
+        function beginHoldDrag(clientX, clientY) {
+          const gInfo = createFloatingGhost(slot, clientX, clientY);
+          dragState.active = true;
+          dragState.ghost = gInfo.ghost;
+          dragState.offsetX = gInfo.offsetX;
+          dragState.offsetY = gInfo.offsetY;
+          dragState.dropIdx = idx;
           slot.classList.add("dragging");
-          if (e.dataTransfer) {
-            e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", String(idx));
+          state.selectedIndex = idx;
+          if (!state.isPlaying) {
+            playPianoChord(state.chords[idx], 0.45);
           }
-        });
+          if (navigator.vibrate) navigator.vibrate(25);
+        }
 
-        slot.addEventListener("dragover", (e) => {
-          e.preventDefault();
-          slot.classList.add("drag-over");
-        });
+        function handleMoveDrag(clientX, clientY, preventDefaultFn) {
+          if (!dragState || dragState.idx !== idx) return;
+          const dx = Math.abs(clientX - dragState.startX);
+          const dy = Math.abs(clientY - dragState.startY);
 
-        slot.addEventListener("dragleave", () => {
-          slot.classList.remove("drag-over");
-        });
+          if (!dragState.active) {
+            if (dx > 10 || dy > 10) {
+              clearTimeout(dragState.holdTimer);
+              dragState = null;
+            }
+            return;
+          }
 
-        slot.addEventListener("dragend", () => {
+          if (preventDefaultFn) preventDefaultFn();
+          updateFloatingGhostPosition(dragState.ghost, clientX, clientY, dragState.offsetX, dragState.offsetY);
+
+          const targetEl = document.elementFromPoint(clientX, clientY);
+          const overSlot = targetEl ? targetEl.closest(".clip-slot") : null;
+          document.querySelectorAll(".clip-slot").forEach(el => el.classList.remove("drag-over"));
+          if (overSlot && overSlot.dataset.clipIndex !== undefined) {
+            const overIdx = Number(overSlot.dataset.clipIndex);
+            if (overIdx !== idx) {
+              overSlot.classList.add("drag-over");
+            }
+            dragState.dropIdx = overIdx;
+          }
+        }
+
+        function endHoldDrag() {
+          if (!dragState || dragState.idx !== idx) return;
+          clearTimeout(dragState.holdTimer);
+          const wasActive = dragState.active;
+          const fromIdx = dragState.idx;
+          const toIdx = dragState.dropIdx;
+          dragState = null;
+
+          removeFloatingGhost();
           slot.classList.remove("dragging");
           document.querySelectorAll(".clip-slot").forEach(el => el.classList.remove("drag-over"));
-        });
 
-        slot.addEventListener("drop", (e) => {
-          e.preventDefault();
-          slot.classList.remove("drag-over");
-          if (dragSourceIdx !== null && dragSourceIdx !== idx) {
-            reorderChord(dragSourceIdx, idx);
+          if (wasActive && toIdx !== null && toIdx !== undefined && toIdx !== fromIdx) {
+            reorderChord(fromIdx, toIdx);
           }
-          dragSourceIdx = null;
-        });
+        }
 
-        // Mobile Touch Drag (via grip icon or long-drag on slot)
+        // Touch Events (Android / Mobile)
         slot.addEventListener("touchstart", (e) => {
+          if (e.target.closest("button")) return;
           const isGrip = e.target.classList.contains("drag-grip");
           const touch = e.touches[0];
-          touchStartPos = { x: touch.clientX, y: touch.clientY, idx, active: isGrip };
+          dragState = {
+            idx,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            active: false,
+            holdTimer: null,
+            ghost: null,
+            offsetX: 0,
+            offsetY: 0,
+            dropIdx: idx
+          };
           if (isGrip) {
-            slot.classList.add("dragging");
+            beginHoldDrag(touch.clientX, touch.clientY);
           } else {
-            clearTimeout(touchHoldTimer);
-            touchHoldTimer = setTimeout(() => {
-              if (touchStartPos && touchStartPos.idx === idx) {
-                touchStartPos.active = true;
-                slot.classList.add("dragging");
-                if (navigator.vibrate) navigator.vibrate(25);
+            dragState.holdTimer = setTimeout(() => {
+              if (dragState && dragState.idx === idx && !dragState.active) {
+                beginHoldDrag(dragState.startX, dragState.startY);
               }
-            }, 260);
+            }, 200);
           }
         }, { passive: true });
 
         slot.addEventListener("touchmove", (e) => {
-          if (!touchStartPos) return;
           const touch = e.touches[0];
-          const dx = Math.abs(touch.clientX - touchStartPos.x);
-          const dy = Math.abs(touch.clientY - touchStartPos.y);
-          if (!touchStartPos.active && (dx > 10 || dy > 10)) {
-            clearTimeout(touchHoldTimer);
-            touchStartPos = null;
-            return;
-          }
-          if (touchStartPos.active) {
-            e.preventDefault();
-            const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
-            const overSlot = targetEl ? targetEl.closest(".clip-slot") : null;
-            document.querySelectorAll(".clip-slot").forEach(el => el.classList.remove("drag-over"));
-            if (overSlot && overSlot.dataset.clipIndex !== undefined) {
-              overSlot.classList.add("drag-over");
-              touchDropIdx = Number(overSlot.dataset.clipIndex);
-            }
-          }
+          handleMoveDrag(touch.clientX, touch.clientY, () => e.preventDefault());
         }, { passive: false });
 
-        slot.addEventListener("touchend", () => {
-          clearTimeout(touchHoldTimer);
-          if (touchStartPos && touchStartPos.active) {
-            slot.classList.remove("dragging");
-            document.querySelectorAll(".clip-slot").forEach(el => el.classList.remove("drag-over"));
-            if (touchDropIdx !== null && touchDropIdx !== touchStartPos.idx) {
-              reorderChord(touchStartPos.idx, touchDropIdx);
-            }
+        slot.addEventListener("touchend", endHoldDrag);
+        slot.addEventListener("touchcancel", endHoldDrag);
+
+        // Mouse Events (Mac / Desktop)
+        slot.addEventListener("mousedown", (e) => {
+          if (e.button !== 0 || e.target.closest("button")) return;
+          const isGrip = e.target.classList.contains("drag-grip");
+          dragState = {
+            idx,
+            startX: e.clientX,
+            startY: e.clientY,
+            active: false,
+            holdTimer: null,
+            ghost: null,
+            offsetX: 0,
+            offsetY: 0,
+            dropIdx: idx
+          };
+          if (isGrip) {
+            beginHoldDrag(e.clientX, e.clientY);
+          } else {
+            dragState.holdTimer = setTimeout(() => {
+              if (dragState && dragState.idx === idx && !dragState.active) {
+                beginHoldDrag(dragState.startX, dragState.startY);
+              }
+            }, 160);
           }
-          touchStartPos = null;
-          touchDropIdx = null;
+
+          const onMouseMove = (ev) => {
+            if (!dragState) return;
+            if (!dragState.active && (Math.abs(ev.clientX - dragState.startX) > 6 || Math.abs(ev.clientY - dragState.startY) > 6)) {
+              clearTimeout(dragState.holdTimer);
+              beginHoldDrag(ev.clientX, ev.clientY);
+            }
+            handleMoveDrag(ev.clientX, ev.clientY, () => ev.preventDefault());
+          };
+
+          const onMouseUp = () => {
+            window.removeEventListener("mousemove", onMouseMove);
+            window.removeEventListener("mouseup", onMouseUp);
+            endHoldDrag();
+          };
+
+          window.addEventListener("mousemove", onMouseMove);
+          window.addEventListener("mouseup", onMouseUp);
         });
 
         clipGrid.appendChild(slot);
