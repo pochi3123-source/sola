@@ -1,4 +1,4 @@
-const CACHE_NAME = "sola-chords-v3";
+const CACHE_NAME = "sola-chords-v4";
 const ASSETS = [
   "./",
   "./index.html",
