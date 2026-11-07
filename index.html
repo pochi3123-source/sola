@@ -316,6 +316,49 @@
       outline-offset: -2px;
     }
 
+    .clip-slot.dragging {
+      opacity: 0.45;
+      transform: scale(0.97);
+      outline: 2px dashed var(--ableton-amber);
+    }
+
+    .clip-slot.drag-over {
+      background: #483b22;
+      outline: 2px solid var(--ableton-cyan);
+      outline-offset: -2px;
+    }
+
+    .clip-actions-right {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .clip-move-btn {
+      background: #222;
+      border: 1px solid #111;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 2px;
+      cursor: pointer;
+    }
+
+    .clip-move-btn:active {
+      background: var(--ableton-amber);
+      color: #111;
+    }
+
+    .drag-grip {
+      cursor: grab;
+      color: #777;
+      font-size: 11px;
+      padding: 0 3px;
+      touch-action: none;
+    }
+
     .clip-top {
       display: flex;
       align-items: flex-start;
@@ -1205,6 +1248,27 @@
     // =========================================================================
     // 6. UI RENDERING
     // =========================================================================
+    let dragSourceIdx = null;
+    let touchStartPos = null;
+    let touchHoldTimer = null;
+    let touchDropIdx = null;
+
+    function reorderChord(fromIdx, toIdx) {
+      if (fromIdx < 0 || toIdx < 0 || fromIdx >= state.chords.length || toIdx >= state.chords.length) return;
+      const [moved] = state.chords.splice(fromIdx, 1);
+      state.chords.splice(toIdx, 0, moved);
+      state.selectedIndex = toIdx;
+      persistCurrent();
+      renderUI();
+      showToast(`CLIP ${fromIdx + 1} ➔ CLIP ${toIdx + 1} へ移動しました`);
+    }
+
+    function moveChord(idx, dir) {
+      const target = idx + dir;
+      if (target < 0 || target >= state.chords.length) return;
+      reorderChord(idx, target);
+    }
+
     function renderUI() {
       // Transport
       const playLed = document.getElementById("playLed");
@@ -1240,6 +1304,8 @@
         const slot = document.createElement("div");
         slot.className = "clip-slot" + (isSelected ? " selected" : "") + (isPlayingThis ? " playing" : "");
         slot.style.setProperty("--clip-color", color);
+        slot.setAttribute("draggable", "true");
+        slot.dataset.clipIndex = String(idx);
 
         // Beat LEDs
         let ledsHtml = `<div class="beat-leds">`;
@@ -1253,10 +1319,15 @@
           <div>
             <div class="clip-top">
               <div class="clip-index-play">
+                <span class="drag-grip" title="ドラッグで入れ替え">⠿</span>
                 <div class="clip-play-tri"></div>
                 <span>CLIP ${idx + 1}</span>
               </div>
-              <button class="clip-del-btn" data-del="${idx}" title="削除">×</button>
+              <div class="clip-actions-right">
+                <button class="clip-move-btn" data-move-left="${idx}" title="前へ移動">◀</button>
+                <button class="clip-move-btn" data-move-right="${idx}" title="次へ移動">▶</button>
+                <button class="clip-del-btn" data-del="${idx}" title="削除">×</button>
+              </div>
             </div>
             <div class="clip-chord-name">${formatChordName(chord)}</div>
           </div>
@@ -1275,6 +1346,16 @@
             deleteChordAt(Number(e.target.dataset.del));
             return;
           }
+          if (e.target.dataset.moveLeft !== undefined) {
+            e.stopPropagation();
+            moveChord(Number(e.target.dataset.moveLeft), -1);
+            return;
+          }
+          if (e.target.dataset.moveRight !== undefined) {
+            e.stopPropagation();
+            moveChord(Number(e.target.dataset.moveRight), 1);
+            return;
+          }
           if (e.target.dataset.cycleBeat !== undefined) {
             e.stopPropagation();
             cycleChordBeats(Number(e.target.dataset.cycleBeat));
@@ -1289,6 +1370,93 @@
           }
           persistCurrent();
           renderUI();
+        });
+
+        // Desktop HTML5 Drag & Drop
+        slot.addEventListener("dragstart", (e) => {
+          dragSourceIdx = idx;
+          slot.classList.add("dragging");
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", String(idx));
+          }
+        });
+
+        slot.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          slot.classList.add("drag-over");
+        });
+
+        slot.addEventListener("dragleave", () => {
+          slot.classList.remove("drag-over");
+        });
+
+        slot.addEventListener("dragend", () => {
+          slot.classList.remove("dragging");
+          document.querySelectorAll(".clip-slot").forEach(el => el.classList.remove("drag-over"));
+        });
+
+        slot.addEventListener("drop", (e) => {
+          e.preventDefault();
+          slot.classList.remove("drag-over");
+          if (dragSourceIdx !== null && dragSourceIdx !== idx) {
+            reorderChord(dragSourceIdx, idx);
+          }
+          dragSourceIdx = null;
+        });
+
+        // Mobile Touch Drag (via grip icon or long-drag on slot)
+        slot.addEventListener("touchstart", (e) => {
+          const isGrip = e.target.classList.contains("drag-grip");
+          const touch = e.touches[0];
+          touchStartPos = { x: touch.clientX, y: touch.clientY, idx, active: isGrip };
+          if (isGrip) {
+            slot.classList.add("dragging");
+          } else {
+            clearTimeout(touchHoldTimer);
+            touchHoldTimer = setTimeout(() => {
+              if (touchStartPos && touchStartPos.idx === idx) {
+                touchStartPos.active = true;
+                slot.classList.add("dragging");
+                if (navigator.vibrate) navigator.vibrate(25);
+              }
+            }, 260);
+          }
+        }, { passive: true });
+
+        slot.addEventListener("touchmove", (e) => {
+          if (!touchStartPos) return;
+          const touch = e.touches[0];
+          const dx = Math.abs(touch.clientX - touchStartPos.x);
+          const dy = Math.abs(touch.clientY - touchStartPos.y);
+          if (!touchStartPos.active && (dx > 10 || dy > 10)) {
+            clearTimeout(touchHoldTimer);
+            touchStartPos = null;
+            return;
+          }
+          if (touchStartPos.active) {
+            e.preventDefault();
+            const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+            const overSlot = targetEl ? targetEl.closest(".clip-slot") : null;
+            document.querySelectorAll(".clip-slot").forEach(el => el.classList.remove("drag-over"));
+            if (overSlot && overSlot.dataset.clipIndex !== undefined) {
+              overSlot.classList.add("drag-over");
+              touchDropIdx = Number(overSlot.dataset.clipIndex);
+            }
+          }
+        }, { passive: false });
+
+        slot.addEventListener("touchend", () => {
+          clearTimeout(touchHoldTimer);
+          if (touchStartPos && touchStartPos.active) {
+            slot.classList.remove("dragging");
+            document.querySelectorAll(".clip-slot").forEach(el => el.classList.remove("drag-over"));
+            if (touchDropIdx !== null && touchDropIdx !== touchStartPos.idx) {
+              reorderChord(touchStartPos.idx, touchDropIdx);
+            }
+          }
+          touchStartPos = null;
+          touchDropIdx = null;
         });
 
         clipGrid.appendChild(slot);
@@ -1509,33 +1677,47 @@
       return new Uint8Array([...header, ...trackEvents]);
     }
 
+    function uint8ToBase64(bytes) {
+      let binary = "";
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary);
+    }
+
+    function triggerDirectMidiDownload(bytes, filename) {
+      try {
+        // Data URI + Blob fallback ensures both Android PWA standalone and desktop browsers download reliably
+        const blob = new Blob([bytes], { type: "application/octet-stream" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.style.display = "none";
+        a.href = url;
+        a.setAttribute("download", filename);
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          a.remove();
+          URL.revokeObjectURL(url);
+        }, 1200);
+        showToast(`MIDI保存完了: ${filename}`);
+      } catch (err) {
+        const b64 = uint8ToBase64(bytes);
+        const a = document.createElement("a");
+        a.href = "data:audio/midi;base64," + b64;
+        a.setAttribute("download", filename);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        showToast(`MIDI保存完了: ${filename}`);
+      }
+    }
+
     function exportMidiFile() {
       const bytes = buildMidiBytes();
-      const blob = new Blob([bytes], { type: "audio/midi" });
-      const safeName = (state.title || "kearu-chords").replace(/[^a-zA-Z0-9_\-\u3000-\u9fff]/g, "_");
+      const safeName = (state.title || "sola-chords").replace(/[^a-zA-Z0-9_\-\u3000-\u9fff]/g, "_");
       const filename = `${safeName}_${state.bpm}bpm.mid`;
-
-      if (navigator.canShare && navigator. share) {
-        const file = new File([blob], filename, { type: "audio/midi" });
-        if (navigator.canShare({ files: [file] })) {
-          navigator.share({
-            title: state.title,
-            text: formatProgressionText(),
-            files: [file]
-          }).catch(() => {});
-          return;
-        }
-      }
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      showToast(`MIDI書き出し完了: ${filename}`);
+      triggerDirectMidiDownload(bytes, filename);
     }
 
     function showToast(msg) {
